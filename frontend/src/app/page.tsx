@@ -8,7 +8,8 @@ import OverlayCanvas, { TrackingData } from "@/components/OverlayCanvas";
 import PuzzleGrid from "@/components/PuzzleGrid";
 import WinOverlay from "@/components/WinOverlay";
 
-const WS_URL = "ws://localhost:8000/ws/track";
+const WS_URL =
+  process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000/ws/track";
 const FRAME_INTERVAL_MS = 50; // ~20 FPS
 
 type AppPhase = "landing" | "camera" | "puzzle";
