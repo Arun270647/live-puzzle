@@ -12,6 +12,19 @@ const WS_URL =
   process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000/ws/track";
 const FRAME_INTERVAL_MS = 50; // ~20 FPS
 
+// Derive HTTP health-check URL from the WS URL for the landing hint + wake-up ping
+const BACKEND_HEALTH_URL = WS_URL
+  .replace(/^wss:\/\//, "https://")
+  .replace(/^ws:\/\//, "http://")
+  .replace(/\/ws\/track$/, "/health");
+
+// Human-readable backend host for the landing page hint
+const BACKEND_HOST = WS_URL
+  .replace(/^wss?:\/\//, "")
+  .replace(/\/ws\/track$/, "");
+
+const IS_LOCAL = BACKEND_HOST.startsWith("localhost") || BACKEND_HOST.startsWith("127.");
+
 type AppPhase = "landing" | "camera" | "puzzle";
 
 export default function Home() {
@@ -20,6 +33,7 @@ export default function Home() {
   const [gridSize, setGridSize] = useState<GridSize>(3);
   const [moveCount, setMoveCount] = useState(0);
   const [captureFlash, setCaptureFlash] = useState(false);
+  const [wakingUp, setWakingUp] = useState(false);
 
   const cameraWrapperRef = useRef<HTMLDivElement>(null);
   const [overlaySize, setOverlaySize] = useState({ w: 800, h: 450 });
@@ -106,6 +120,17 @@ export default function Home() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleStart = async () => {
+    // For Render free tier: ping /health first to wake the service up
+    if (!IS_LOCAL) {
+      setWakingUp(true);
+      try {
+        await fetch(BACKEND_HEALTH_URL, { signal: AbortSignal.timeout(60_000) });
+      } catch {
+        // Ignore — even if ping times out, proceed and let WS retry logic handle it
+      } finally {
+        setWakingUp(false);
+      }
+    }
     setPhase("camera");
     await startCamera();
   };
@@ -217,12 +242,49 @@ export default function Home() {
             📸 Start Camera
           </button>
 
-          <p style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-            Make sure the Python backend is running on{" "}
-            <code style={{ color: "var(--accent-cyan)", fontFamily: "monospace" }}>
-              localhost:8000
-            </code>
-          </p>
+          {IS_LOCAL ? (
+            <p style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+              Make sure the Python backend is running on{" "}
+              <code style={{ color: "var(--accent-cyan)", fontFamily: "monospace" }}>
+                {BACKEND_HOST}
+              </code>
+            </p>
+          ) : (
+            <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", textAlign: "center", maxWidth: 340 }}>
+              Backend hosted on{" "}
+              <code style={{ color: "var(--accent-cyan)", fontFamily: "monospace" }}>{BACKEND_HOST}</code>
+              {" "}· Free tier may take ~30s to wake up on first use
+            </p>
+          )}
+
+          {/* Wake-up overlay */}
+          {wakingUp && (
+            <div style={{
+              position: "fixed", inset: 0, zIndex: 200,
+              display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center",
+              background: "rgba(5,7,15,0.82)", backdropFilter: "blur(8px)",
+              gap: "1rem",
+            }}>
+              <div style={{ fontSize: "2.5rem" }}>⏳</div>
+              <h3 style={{ color: "var(--accent-cyan)" }}>Waking up backend…</h3>
+              <p style={{ maxWidth: 320, textAlign: "center", fontSize: "0.875rem" }}>
+                The backend is on Render free tier — it spins down when idle.
+                Hang tight, this takes ~30–60 seconds once.
+              </p>
+              <div style={{
+                width: 220, height: 4, background: "var(--bg-glass)",
+                borderRadius: 2, overflow: "hidden",
+              }}>
+                <div style={{
+                  height: "100%", width: "40%",
+                  background: "linear-gradient(90deg, var(--accent-violet), var(--accent-cyan))",
+                  borderRadius: 2,
+                  animation: "slide 1.4s ease-in-out infinite",
+                }} />
+              </div>
+            </div>
+          )}
         </main>
       )}
 
