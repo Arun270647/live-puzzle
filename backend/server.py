@@ -188,6 +188,11 @@ def health() -> Dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/")
+def root() -> Dict[str, str]:
+    return {"service": "live-puzzle-backend", "status": "ok", "websocket": "/ws/track"}
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
